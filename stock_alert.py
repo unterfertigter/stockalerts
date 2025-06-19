@@ -5,6 +5,7 @@ import requests
 from email.mime.text import MIMEText
 from bs4 import BeautifulSoup
 import json
+import datetime
 
 CHECK_INTERVAL = int(os.getenv("CHECK_INTERVAL", "60"))  # seconds
 EMAIL_TO = os.getenv("EMAIL_TO")
@@ -58,24 +59,29 @@ def send_email(subject, body):
     process.communicate(message.encode('utf-8'))
 
 
+def log(msg):
+    print(f"[{datetime.datetime.now().isoformat(sep=' ', timespec='seconds')}] {msg}")
+
+
 def main():
     config = load_config(CONFIG_PATH)
-    print(
-        f"Checking {len(config)} ISIN(s) on Tradegate every {CHECK_INTERVAL} seconds."
-    )
-    # Track which ISINs have already triggered an alert
-    active_entries = config.copy()
+    active_alerts = config.copy()
+    
     # Fail count to track consecutive failures
     fail_count = 0
-    while active_entries:
+
+    log(f"Monitoring {len(active_alerts)} ISIN(s) every {CHECK_INTERVAL} seconds. Max fail count: {MAX_FAIL_COUNT}")
+
+    while active_alerts:
+        # Track which ISINs have already triggered an alert
         to_remove = []
-        for entry in active_entries:
+        for entry in active_alerts:
             isin = entry["isin"]
             upper_threshold = entry.get("upper_threshold")
             lower_threshold = entry.get("lower_threshold")
             price = get_stock_price(isin)
             if price is not None:
-                print(f"Current price for ISIN {isin}: {price}")
+                log(f"Current price for ISIN {isin}: {price}")
                 fail_count = 0  # Reset fail count on success
                 alert = False
                 alert_reason = ""
@@ -90,10 +96,10 @@ def main():
                         f"Stock Alert: {isin} {alert_reason} (price: {price})",
                         f"The stock with ISIN {isin} {alert_reason}. Current price: {price}.",
                     )
-                    print(f"Alert sent for {isin} ({alert_reason}). Skipping this ISIN from now on.")
+                    log(f"Alert sent for {isin} ({alert_reason}). Skipping this ISIN from now on.")
                     to_remove.append(entry)
             else:
-                print(f"Failed to get stock price for {isin}.")
+                log(f"Failed to get stock price for ISIN {isin}.")
                 send_email(
                     f"Stock Alert: Failed to retrieve price for {isin}",
                     f"The service failed to retrieve the stock price for ISIN {isin}.",
@@ -101,16 +107,16 @@ def main():
                 fail_count += 1
                 if fail_count >= MAX_FAIL_COUNT:
                     print(
-                        f"Failed to retrieve stock prices {MAX_FAIL_COUNT} times in a row. Stopping service."
+                        f"Failed to retrieve stock prices {MAX_FAIL_COUNT} times in a row. Stopping monitoring."
                     )
                     send_email(
-                        f"Stock Alert: Retrieval failed {MAX_FAIL_COUNT} times",
-                        f"The service failed to retrieve stock prices {MAX_FAIL_COUNT} times in a row and is stopping.",
+                        "Stock Alert: Service stopped due to repeated failures",
+                        f"The service stopped after {MAX_FAIL_COUNT} consecutive failures to retrieve stock prices.",
                     )
                     return
         # Remove ISINs that have triggered alerts
         for entry in to_remove:
-            active_entries.remove(entry)
+            active_alerts.remove(entry)
         time.sleep(CHECK_INTERVAL)
 
 

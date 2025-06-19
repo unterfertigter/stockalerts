@@ -1,4 +1,4 @@
 [
-  {"isin": "US69608A1088", "upper_threshold": 114, "lower_threshold": 110},
-  {"isin": "US4581401001", "upper_threshold": 18, "lower_threshold": 15}
+  {"isin": "US69608A1088", "upper_threshold": 129.87, "lower_threshold": 112.21},
+  {"isin": "US4581401001", "upper_threshold": 17.87, "lower_threshold": 17.65}
 ]

@@ -1,21 +1,18 @@
 import os
 import time
-import smtplib
-from email.mime.text import MIMEText
+import subprocess
 import requests
+from email.mime.text import MIMEText
 from bs4 import BeautifulSoup
 import json
 
-CONFIG_PATH = os.getenv("CONFIG_PATH", "config.json")
-CHECK_INTERVAL = int(os.getenv("CHECK_INTERVAL", "300"))  # seconds
+CHECK_INTERVAL = int(os.getenv("CHECK_INTERVAL", "60"))  # seconds
 EMAIL_TO = os.getenv("EMAIL_TO")
 EMAIL_FROM = os.getenv("EMAIL_FROM")
-EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD")
-SMTP_SERVER = os.getenv("SMTP_SERVER", "smtp.gmail.com")
-SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
+CONFIG_PATH = os.getenv("CONFIG_PATH", "config.json")
 MAX_FAIL_COUNT = int(os.getenv("MAX_FAIL_COUNT", "3"))
 
-if not all([EMAIL_TO, EMAIL_FROM, EMAIL_PASSWORD]):
+if not all([EMAIL_TO, EMAIL_FROM]):
     raise Exception("Missing required environment variables.")
 
 
@@ -56,14 +53,9 @@ def get_stock_price(isin):
 
 
 def send_email(subject, body):
-    msg = MIMEText(body)
-    msg["Subject"] = subject
-    msg["From"] = EMAIL_FROM
-    msg["To"] = EMAIL_TO
-    with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
-        server.starttls()
-        server.login(EMAIL_FROM, EMAIL_PASSWORD)
-        server.sendmail(EMAIL_FROM, EMAIL_TO, msg.as_string())
+    message = f"Subject: {subject}\nTo: {EMAIL_TO}\nFrom: {EMAIL_FROM}\n\n{body}"
+    process = subprocess.Popen(['/usr/sbin/sendmail', '-t', '-oi'], stdin=subprocess.PIPE)
+    process.communicate(message.encode('utf-8'))
 
 
 def main():
@@ -90,13 +82,13 @@ def main():
                 if upper_threshold is not None and price >= upper_threshold:
                     alert = True
                     alert_reason = f"reached or exceeded upper threshold {upper_threshold}"
-                if lower_threshold is not None and price < lower_threshold:
+                if lower_threshold is not None and price <= lower_threshold:
                     alert = True
-                    alert_reason = f"fell below lower threshold {lower_threshold}"
+                    alert_reason = f"reached or fell below lower threshold {lower_threshold}"
                 if alert:
                     send_email(
                         f"Stock Alert: {isin} {alert_reason} (price: {price})",
-                        f"The stock with ISIN {isin} has {alert_reason}. Current price: {price}.",
+                        f"The stock with ISIN {isin} {alert_reason}. Current price: {price}.",
                     )
                     print(f"Alert sent for {isin} ({alert_reason}). Skipping this ISIN from now on.")
                     to_remove.append(entry)

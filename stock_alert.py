@@ -1,19 +1,33 @@
+from email.mime.text import MIMEText
 import os
 import time
-import subprocess
 import requests
-from email.mime.text import MIMEText
 from bs4 import BeautifulSoup
 import json
 import datetime
+import smtplib
 
 CHECK_INTERVAL = int(os.getenv("CHECK_INTERVAL", "60"))  # seconds
-EMAIL_TO = os.getenv("EMAIL_TO")
 EMAIL_FROM = os.getenv("EMAIL_FROM")
+EMAIL_TO = os.getenv("EMAIL_TO")
+SMTP_SERVER = os.getenv("SMTP_SERVER")
+SMTP_PORT = int(os.getenv("SMTP_PORT", 587))
+SMTP_USERNAME = os.getenv("SMTP_USERNAME")
+SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")
 CONFIG_PATH = os.getenv("CONFIG_PATH", "config.json")
 MAX_FAIL_COUNT = int(os.getenv("MAX_FAIL_COUNT", "3"))
 
-if not all([EMAIL_TO, EMAIL_FROM]):
+print(f"CHECK_INTERVAL = {CHECK_INTERVAL}")
+print(f"EMAIL_FROM = {EMAIL_FROM}")
+print(f"EMAIL_TO = {EMAIL_TO}")
+print(f"SMTP_SERVER = {SMTP_SERVER}")
+print(f"SMTP_PORT = {SMTP_PORT}")
+print(f"SMTP_USERNAME = {SMTP_USERNAME}")
+print(f"SMTP_PASSWORD = {'***' if SMTP_PASSWORD else None}")
+print(f"CONFIG_PATH = {CONFIG_PATH}")
+print(f"MAX_FAIL_COUNT = {MAX_FAIL_COUNT}")
+
+if not all([EMAIL_TO, EMAIL_FROM, SMTP_SERVER, SMTP_PORT, SMTP_USERNAME, SMTP_PASSWORD]):
     raise Exception("Missing required environment variables.")
 
 
@@ -54,9 +68,17 @@ def get_stock_price(isin):
 
 
 def send_email(subject, body):
-    message = f"Subject: {subject}\nTo: {EMAIL_TO}\nFrom: {EMAIL_FROM}\n\n{body}"
-    process = subprocess.Popen(['/usr/sbin/sendmail', '-t', '-oi'], stdin=subprocess.PIPE)
-    process.communicate(message.encode('utf-8'))
+    msg = MIMEText(body)
+    msg["Subject"] = subject
+    msg["From"] = EMAIL_FROM
+    msg["To"] = EMAIL_TO
+    try:
+        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
+            server.starttls()
+            server.login(SMTP_USERNAME, SMTP_PASSWORD)
+            server.sendmail(EMAIL_FROM, EMAIL_TO, msg.as_string())
+    except Exception as e:
+        log(f"Failed to send email: {e}")
 
 
 def log(msg):

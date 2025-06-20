@@ -1,16 +1,20 @@
 # Stock Alert Service
 
-This service checks multiple stock values at regular intervals using real-time data from Tradegate Exchange and sends an email alert when a threshold is reached.
+This service checks multiple stock prices at regular intervals using real-time data from Tradegate Exchange and sends an email alert when a price threshold is reached.
 
 ## Configuration
 
 Set the following environment variables in an `.env` file (see `.env.example`) or pass them directly in the `docker run` command with `--env key=value`:
 
-- `CHECK_INTERVAL`: Check interval in seconds (default: 60)
 - `EMAIL_TO`: Recipient email address
 - `EMAIL_FROM`: Sender email address
-- `CONFIG_PATH`: Path to the JSON config file which lists all stock ISINs to be checked (default: `config.json`)
+- `SMTP_SERVER`: SMTP server address (your ISP's server)
+- `SMTP_PORT`: SMTP server port (default: 587)
+- `SMTP_USERNAME`: SMTP login username
+- `SMTP_PASSWORD`: SMTP login password
+- `CONFIG_PATH`: Path to the JSON config file which lists all stock ISINs to be monitored (default: `config.json`)
 - `MAX_FAIL_COUNT`: Maximum allowed consecutive failures to retrieve a stock price before stopping the service (default: 3)
+- `CHECK_INTERVAL`: Check interval in seconds (default: 60)
 
 Create a `config.json` file in the same directory with a list of ISIN/threshold pairs:
 
@@ -41,4 +45,4 @@ docker run --env-file .env stock-alert
 
 - No API key is required; the script uses web scraping for real-time prices.
 - Web scraping may break if Tradegate changes their website layout.
-- The service uses the local `sendmail` command for sending emails. No SMTP configuration is required.
+- The service uses an external SMTP server for sending emails. Configure your SMTP server details in the `.env` file.

@@ -6,6 +6,7 @@ from bs4 import BeautifulSoup
 import json
 import datetime
 import smtplib
+import pytz
 
 CHECK_INTERVAL = int(os.getenv("CHECK_INTERVAL", "60"))  # seconds
 EMAIL_FROM = os.getenv("EMAIL_FROM")
@@ -94,51 +95,57 @@ def main():
 
     log(f"Monitoring {len(active_alerts)} ISIN(s) every {CHECK_INTERVAL} seconds. Max fail count: {MAX_FAIL_COUNT}")
 
+    cet = pytz.timezone("Europe/Berlin")
+    market_open = datetime.time(7, 30)
+    market_close = datetime.time(22, 0)
+
     while active_alerts:
-        # Track which ISINs have already triggered an alert
-        to_remove = []
-        for entry in active_alerts:
-            isin = entry["isin"]
-            upper_threshold = entry.get("upper_threshold")
-            lower_threshold = entry.get("lower_threshold")
-            price = get_stock_price(isin)
-            if price is not None:
-                log(f"Current price for ISIN {isin}: {price}")
-                fail_count = 0  # Reset fail count on success
-                alert = False
-                alert_reason = ""
-                if upper_threshold is not None and price >= upper_threshold:
-                    alert = True
-                    alert_reason = f"reached or exceeded upper threshold {upper_threshold}"
-                if lower_threshold is not None and price <= lower_threshold:
-                    alert = True
-                    alert_reason = f"reached or fell below lower threshold {lower_threshold}"
-                if alert:
+        now_cet = datetime.datetime.now(cet).time()
+        if market_open <= now_cet <= market_close:
+            # Track which ISINs have already triggered an alert
+            to_remove = []
+            for entry in active_alerts:
+                isin = entry["isin"]
+                upper_threshold = entry.get("upper_threshold")
+                lower_threshold = entry.get("lower_threshold")
+                price = get_stock_price(isin)
+                if price is not None:
+                    log(f"Current price for ISIN {isin}: {price}")
+                    fail_count = 0  # Reset fail count on success
+                    alert = False
+                    alert_reason = ""
+                    if upper_threshold is not None and price >= upper_threshold:
+                        alert = True
+                        alert_reason = f"reached or exceeded upper threshold {upper_threshold}"
+                    if lower_threshold is not None and price <= lower_threshold:
+                        alert = True
+                        alert_reason = f"reached or fell below lower threshold {lower_threshold}"
+                    if alert:
+                        send_email(
+                            f"Stock Alert: {isin} {alert_reason} (price: {price})",
+                            f"The stock with ISIN {isin} {alert_reason}. Current price: {price}.",
+                        )
+                        log(f"Alert sent for {isin} ({alert_reason}). Skipping this ISIN from now on.")
+                        to_remove.append(entry)
+                else:
+                    log(f"Failed to get stock price for ISIN {isin}.")
                     send_email(
-                        f"Stock Alert: {isin} {alert_reason} (price: {price})",
-                        f"The stock with ISIN {isin} {alert_reason}. Current price: {price}.",
+                        f"Stock Alert: Failed to retrieve price for {isin}",
+                        f"The service failed to retrieve the stock price for ISIN {isin}.",
                     )
-                    log(f"Alert sent for {isin} ({alert_reason}). Skipping this ISIN from now on.")
-                    to_remove.append(entry)
-            else:
-                log(f"Failed to get stock price for ISIN {isin}.")
-                send_email(
-                    f"Stock Alert: Failed to retrieve price for {isin}",
-                    f"The service failed to retrieve the stock price for ISIN {isin}.",
-                )
-                fail_count += 1
-                if fail_count >= MAX_FAIL_COUNT:
-                    print(
-                        f"Failed to retrieve stock prices {MAX_FAIL_COUNT} times in a row. Stopping monitoring."
-                    )
-                    send_email(
-                        "Stock Alert: Service stopped due to repeated failures",
-                        f"The service stopped after {MAX_FAIL_COUNT} consecutive failures to retrieve stock prices.",
-                    )
-                    return
-        # Remove ISINs that have triggered alerts
-        for entry in to_remove:
-            active_alerts.remove(entry)
+                    fail_count += 1
+                    if fail_count >= MAX_FAIL_COUNT:
+                        print(
+                            f"Failed to retrieve stock prices {MAX_FAIL_COUNT} times in a row. Stopping monitoring."
+                        )
+                        send_email(
+                            "Stock Alert: Service stopped due to repeated failures",
+                            f"The service stopped after {MAX_FAIL_COUNT} consecutive failures to retrieve stock prices.",
+                        )
+                        return
+            # Remove ISINs that have triggered alerts
+            for entry in to_remove:
+                active_alerts.remove(entry)
         time.sleep(CHECK_INTERVAL)
 
 

@@ -7,6 +7,11 @@ import json
 import datetime
 import smtplib
 import pytz
+import threading
+from flask import Flask, request, render_template_string, redirect, url_for, jsonify
+from dotenv import load_dotenv
+
+load_dotenv()
 
 CHECK_INTERVAL = int(os.getenv("CHECK_INTERVAL", "60"))  # seconds
 EMAIL_FROM = os.getenv("EMAIL_FROM")
@@ -18,15 +23,18 @@ SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")
 CONFIG_PATH = os.getenv("CONFIG_PATH", "config.json")
 MAX_FAIL_COUNT = int(os.getenv("MAX_FAIL_COUNT", "3"))
 
-print(f"CHECK_INTERVAL = {CHECK_INTERVAL}")
-print(f"EMAIL_FROM = {EMAIL_FROM}")
-print(f"EMAIL_TO = {EMAIL_TO}")
-print(f"SMTP_SERVER = {SMTP_SERVER}")
-print(f"SMTP_PORT = {SMTP_PORT}")
-print(f"SMTP_USERNAME = {SMTP_USERNAME}")
-print(f"SMTP_PASSWORD = {'***' if SMTP_PASSWORD else None}")
-print(f"CONFIG_PATH = {CONFIG_PATH}")
-print(f"MAX_FAIL_COUNT = {MAX_FAIL_COUNT}")
+def log(msg):
+    print(f"[{datetime.datetime.now().isoformat(sep=' ', timespec='seconds')}] {msg}")
+
+log(f"CHECK_INTERVAL = {CHECK_INTERVAL}")
+log(f"EMAIL_FROM = {EMAIL_FROM}")
+log(f"EMAIL_TO = {EMAIL_TO}")
+log(f"SMTP_SERVER = {SMTP_SERVER}")
+log(f"SMTP_PORT = {SMTP_PORT}")
+log(f"SMTP_USERNAME = {SMTP_USERNAME}")
+log(f"SMTP_PASSWORD = {'***' if SMTP_PASSWORD else None}")
+log(f"CONFIG_PATH = {CONFIG_PATH}")
+log(f"MAX_FAIL_COUNT = {MAX_FAIL_COUNT}")
 
 if not all([EMAIL_TO, EMAIL_FROM, SMTP_SERVER, SMTP_PORT, SMTP_USERNAME, SMTP_PASSWORD]):
     raise Exception("Missing required environment variables.")
@@ -37,10 +45,10 @@ def load_config(path):
         with open(path, "r") as f:
             return json.load(f)
     except FileNotFoundError:
-        print(f"Config file not found: {path}")
+        log(f"Config file not found: {path}")
         exit(1)
     except json.JSONDecodeError as e:
-        print(f"Error parsing config file '{path}': {e}")
+        log(f"Error parsing config file '{path}': {e}")
         exit(1)
 
 
@@ -63,8 +71,8 @@ def get_stock_price(isin):
                 try:
                     return float(price_text)
                 except Exception:
-                    print("Could not parse price:", price_text)
-    print("Could not find price on page.")
+                    log("Could not parse price:", price_text)
+    log("Could not find price on page.")
     return None
 
 
@@ -82,36 +90,120 @@ def send_email(subject, body):
         log(f"Failed to send email: {e}")
 
 
-def log(msg):
-    print(f"[{datetime.datetime.now().isoformat(sep=' ', timespec='seconds')}] {msg}")
+# Shared config and lock for thread safety
+shared_config = []
+config_lock = threading.Lock()
+
+# Flask app for admin UI
+app = Flask(__name__)
+
+HTML_TEMPLATE = '''
+<!DOCTYPE html>
+<html>
+<head><title>Stock Alert Admin</title></head>
+<body>
+<h2>Stock Alert Administration</h2>
+<table border="1">
+<tr><th>ISIN</th><th>Upper Threshold</th><th>Lower Threshold</th><th>Active</th><th>Actions</th></tr>
+{% for entry in config %}
+<tr>
+  <form method="post" action="/update">
+    <td>{{ entry['isin'] }}</td>
+    <td><input type="number" step="any" name="upper_threshold" value="{{ entry.get('upper_threshold', '') }}"></td>
+    <td><input type="number" step="any" name="lower_threshold" value="{{ entry.get('lower_threshold', '') }}"></td>
+    <td><input type="checkbox" name="active" value="1" {% if entry.get('active', True) %}checked{% endif %}></td>
+    <td>
+      <input type="hidden" name="isin" value="{{ entry['isin'] }}">
+      <input type="submit" value="Update">
+    </td>
+  </form>
+</tr>
+{% endfor %}
+</table>
+</body>
+</html>
+'''
+
+# --- Flask admin UI and API endpoints ---
+
+@app.route("/", methods=["GET"])
+# Renders the main admin web page with a table of all ISINs and their thresholds, allowing editing via a form.
+def admin_page():
+    with config_lock:
+        config = list(shared_config)
+    return render_template_string(HTML_TEMPLATE, config=config)
+
+@app.route("/update", methods=["POST"])
+# Handles form submissions from the admin page to update thresholds for a specific ISIN and its active status.
+def update_threshold():
+    isin = request.form["isin"]
+    upper = request.form.get("upper_threshold")
+    lower = request.form.get("lower_threshold")
+    active = request.form.get("active") == "1"
+    with config_lock:
+        for entry in shared_config:
+            if entry["isin"] == isin:
+                entry["upper_threshold"] = float(upper) if upper else None
+                entry["lower_threshold"] = float(lower) if lower else None
+                entry["active"] = active
+    return redirect(url_for("admin_page"))
+
+@app.route("/C", methods=["GET"])
+# Returns the current alert configuration as JSON (for API clients or debugging).
+def api_get_config():
+    with config_lock:
+        return jsonify(shared_config)
+
+@app.route("/api/config", methods=["POST"])
+# Allows updating thresholds for a specific ISIN via a JSON API (for programmatic access).
+def api_update_config():
+    data = request.json
+    isin = data.get("isin")
+    upper = data.get("upper_threshold")
+    lower = data.get("lower_threshold")
+    with config_lock:
+        for entry in shared_config:
+            if entry["isin"] == isin:
+                entry["upper_threshold"] = upper
+                entry["lower_threshold"] = lower
+    return {"status": "ok"}
 
 
 def main():
+    global shared_config
     config = load_config(CONFIG_PATH)
-    active_alerts = config.copy()
+    # Ensure all entries have an 'active' field (default True)
+    for entry in config:
+        if "active" not in entry:
+            entry["active"] = True
+    with config_lock:
+        shared_config = config.copy()
+    active_alerts = shared_config
     
     # Fail count to track consecutive failures
     fail_count = 0
 
     log(f"Monitoring {len(active_alerts)} ISIN(s) every {CHECK_INTERVAL} seconds. Max fail count: {MAX_FAIL_COUNT}")
 
-    cet = pytz.timezone("Europe/Berlin")
     market_open = datetime.time(7, 30)
     market_close = datetime.time(22, 0)
 
-    while active_alerts:
-        now_cet = datetime.datetime.now(cet).time()
+    while True:
+        now_cet = datetime.datetime.now(pytz.timezone("Europe/Berlin")).time()
         if market_open <= now_cet <= market_close:
-            # Track which ISINs have already triggered an alert
-            to_remove = []
-            for entry in active_alerts:
+            to_deactivate = []
+            with config_lock:
+                alerts_to_check = [entry for entry in shared_config if entry.get("active", True)]
+            if not alerts_to_check:
+                log("All entries are marked as inactive. No ISINs are currently being monitored.")
+            for entry in alerts_to_check:
                 isin = entry["isin"]
                 upper_threshold = entry.get("upper_threshold")
                 lower_threshold = entry.get("lower_threshold")
                 price = get_stock_price(isin)
                 if price is not None:
                     log(f"Current price for ISIN {isin}: {price}")
-                    fail_count = 0  # Reset fail count on success
+                    fail_count = 0
                     alert = False
                     alert_reason = ""
                     if upper_threshold is not None and price >= upper_threshold:
@@ -125,8 +217,8 @@ def main():
                             f"Stock Alert: {isin} {alert_reason} (price: {price})",
                             f"The stock with ISIN {isin} {alert_reason}. Current price: {price}.",
                         )
-                        log(f"Alert sent for {isin} ({alert_reason}). Skipping this ISIN from now on.")
-                        to_remove.append(entry)
+                        log(f"Alert sent for {isin} ({alert_reason}). Marking as inactive.")
+                        to_deactivate.append(isin)
                 else:
                     log(f"Failed to get stock price for ISIN {isin}.")
                     send_email(
@@ -135,7 +227,7 @@ def main():
                     )
                     fail_count += 1
                     if fail_count >= MAX_FAIL_COUNT:
-                        print(
+                        log(
                             f"Failed to retrieve stock prices {MAX_FAIL_COUNT} times in a row. Stopping monitoring."
                         )
                         send_email(
@@ -143,11 +235,20 @@ def main():
                             f"The service stopped after {MAX_FAIL_COUNT} consecutive failures to retrieve stock prices.",
                         )
                         return
-            # Remove ISINs that have triggered alerts
-            for entry in to_remove:
-                active_alerts.remove(entry)
+            # Mark ISINs as inactive
+            with config_lock:
+                for entry in shared_config:
+                    if entry["isin"] in to_deactivate:
+                        entry["active"] = False
+                alerts_to_check = [entry for entry in shared_config if entry.get("active", True)]
+                if not alerts_to_check:
+                    log("All entries are marked as inactive. No ISINs are currently being monitored.")
         time.sleep(CHECK_INTERVAL)
 
 
 if __name__ == "__main__":
+    # Start Flask app in a separate thread
+    flask_thread = threading.Thread(target=lambda: app.run(host="0.0.0.0", port=5000, debug=False, use_reloader=False))
+    flask_thread.daemon = True
+    flask_thread.start()
     main()

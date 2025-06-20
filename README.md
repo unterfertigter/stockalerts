@@ -38,7 +38,7 @@ Create a `config.json` file in the same directory with a list of ISIN/threshold 
 ```bash
 docker build -t stock-alert .
 
-docker run --env-file .env stock-alert
+docker run --env-file .env -p 5000:5000 stock-alert
 ```
 
 ## Notes

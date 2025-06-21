@@ -1,11 +1,20 @@
+import logging
 import smtplib
 from email.mime.text import MIMEText
-import os
-import logging
 
 logger = logging.getLogger("email_utils")
 
-def send_email(subject: str, body: str, EMAIL_FROM: str, EMAIL_TO: str, SMTP_SERVER: str, SMTP_PORT: int, SMTP_USERNAME: str, SMTP_PASSWORD: str):
+
+def send_email(
+    subject: str,
+    body: str,
+    EMAIL_FROM: str,
+    EMAIL_TO: str,
+    SMTP_SERVER: str,
+    SMTP_PORT: int,
+    SMTP_USERNAME: str,
+    SMTP_PASSWORD: str,
+):
     msg = MIMEText(body)
     msg["Subject"] = subject
     msg["From"] = EMAIL_FROM

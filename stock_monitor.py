@@ -1,9 +1,10 @@
+import datetime
+import logging
+from typing import Optional
+
+import pytz
 import requests
 from bs4 import BeautifulSoup
-import datetime
-import pytz
-from typing import Optional
-import logging
 
 logger = logging.getLogger("stock_monitor")
 
@@ -25,9 +26,7 @@ def get_stock_price(isin: str, retries: int = 3, delay: int = 2) -> Optional[flo
                 if first_row:
                     cols = first_row.find_all("td")
                     if len(cols) >= 5:
-                        price_text = (
-                            cols[4].text.strip().replace("\xa0", "").replace(",", ".")
-                        )
+                        price_text = cols[4].text.strip().replace("\xa0", "").replace(",", ".")
                         try:
                             return float(price_text)
                         except Exception:
@@ -35,9 +34,7 @@ def get_stock_price(isin: str, retries: int = 3, delay: int = 2) -> Optional[flo
             logger.warning("Could not find price on page.")
             return None
         except requests.exceptions.RequestException as e:
-            logger.error(
-                f"Error retrieving price for ISIN {isin} (attempt {attempt+1}/{retries}): {e}"
-            )
+            logger.error(f"Error retrieving price for ISIN {isin} (attempt {attempt + 1}/{retries}): {e}")
             import time
 
             time.sleep(delay)

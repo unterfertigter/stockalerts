@@ -1,12 +1,13 @@
-from config_manager import load_config, save_config, shared_config, config_lock
-from stock_monitor import get_stock_price, is_market_open
-from email_utils import send_email
-from flask import Flask, request, render_template, redirect, url_for, jsonify
-import os
-import datetime
-import threading
-from dotenv import load_dotenv
 import logging
+import os
+import threading
+
+from dotenv import load_dotenv
+from flask import Flask, jsonify, redirect, render_template, request, url_for
+
+from config_manager import config_lock, load_config, save_config, shared_config
+from email_utils import send_email
+from stock_monitor import get_stock_price, is_market_open
 
 load_dotenv()
 
@@ -37,9 +38,7 @@ logger.info(f"SMTP_PASSWORD = {'***' if SMTP_PASSWORD else None}")
 logger.info(f"CONFIG_PATH = {CONFIG_PATH}")
 logger.info(f"MAX_FAIL_COUNT = {MAX_FAIL_COUNT}")
 
-if not all(
-    [EMAIL_TO, EMAIL_FROM, SMTP_SERVER, SMTP_PORT, SMTP_USERNAME, SMTP_PASSWORD]
-):
+if not all([EMAIL_TO, EMAIL_FROM, SMTP_SERVER, SMTP_PORT, SMTP_USERNAME, SMTP_PASSWORD]):
     raise Exception("Missing required environment variables.")
 
 # Flask app for admin UI
@@ -108,13 +107,9 @@ def main():
         if is_market_open():
             to_deactivate = []
             with config_lock:
-                alerts_to_check = [
-                    entry for entry in shared_config if entry.get("active", True)
-                ]
+                alerts_to_check = [entry for entry in shared_config if entry.get("active", True)]
             if not alerts_to_check:
-                logger.info(
-                    "All entries are marked as inactive. No ISINs are currently being monitored."
-                )
+                logger.info("All entries are marked as inactive. No ISINs are currently being monitored.")
             for entry in alerts_to_check:
                 isin = entry["isin"]
                 upper_threshold = entry.get("upper_threshold")
@@ -127,14 +122,10 @@ def main():
                     alert_reason = ""
                     if upper_threshold is not None and price >= upper_threshold:
                         alert = True
-                        alert_reason = (
-                            f"reached or exceeded upper threshold {upper_threshold}"
-                        )
+                        alert_reason = f"reached or exceeded upper threshold {upper_threshold}"
                     if lower_threshold is not None and price <= lower_threshold:
                         alert = True
-                        alert_reason = (
-                            f"reached or fell below lower threshold {lower_threshold}"
-                        )
+                        alert_reason = f"reached or fell below lower threshold {lower_threshold}"
                     if alert:
                         send_email(
                             f"Stock Alert: {isin} {alert_reason} (price: {price})",
@@ -146,9 +137,7 @@ def main():
                             SMTP_USERNAME,
                             SMTP_PASSWORD,
                         )
-                        logger.info(
-                            f"Alert sent for {isin} ({alert_reason}). Marking as inactive."
-                        )
+                        logger.info(f"Alert sent for {isin} ({alert_reason}). Marking as inactive.")
                         to_deactivate.append(isin)
                 else:
                     logger.warning(f"Failed to get stock price for ISIN {isin}.")
@@ -183,24 +172,16 @@ def main():
                 for entry in shared_config:
                     if entry["isin"] in to_deactivate:
                         entry["active"] = False
-                alerts_to_check = [
-                    entry for entry in shared_config if entry.get("active", True)
-                ]
+                alerts_to_check = [entry for entry in shared_config if entry.get("active", True)]
                 if not alerts_to_check:
-                    logger.info(
-                        "All entries are marked as inactive. No ISINs are currently being monitored."
-                    )
+                    logger.info("All entries are marked as inactive. No ISINs are currently being monitored.")
         import time
 
         time.sleep(CHECK_INTERVAL)
 
 
 if __name__ == "__main__":
-    flask_thread = threading.Thread(
-        target=lambda: app.run(
-            host="0.0.0.0", port=5000, debug=False, use_reloader=False
-        )
-    )
+    flask_thread = threading.Thread(target=lambda: app.run(host="0.0.0.0", port=5000, debug=False, use_reloader=False))
     flask_thread.daemon = True
     flask_thread.start()
     main()

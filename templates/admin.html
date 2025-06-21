@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Stock Alert Admin</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script src="{{ url_for('static', filename='theme.js') }}"></script>
+</head>
+
+<body>
+    <div class="container">
+        <button class="theme-toggle" onclick="toggleTheme()">Toggle Theme</button>
+        <h2>Stock Alert Administration</h2>
+        <table>
+            <tr>
+                <th>ISIN</th>
+                <th>Upper Threshold</th>
+                <th>Lower Threshold</th>
+                <th>Active</th>
+                <th>Actions</th>
+            </tr>
+            {% for entry in config %}
+            <tr>
+                <form method="post" action="/update">
+                    <td>{{ entry['isin'] }}</td>
+                    <td><input type="number" step="any" name="upper_threshold"
+                            value="{{ entry.get('upper_threshold', '') }}"></td>
+                    <td><input type="number" step="any" name="lower_threshold"
+                            value="{{ entry.get('lower_threshold', '') }}"></td>
+                    <td><input type="checkbox" name="active" value="1" {% if entry.get('active', True) %}checked{% endif
+                            %}></td>
+                    <td>
+                        <input type="hidden" name="isin" value="{{ entry['isin'] }}">
+                        <input type="submit" value="Update">
+                    </td>
+                </form>
+            </tr>
+            {% endfor %}
+        </table>
+    </div>
+</body>
+
+</html>

@@ -56,23 +56,30 @@ def get_tradegate_url(isin):
     return f"https://www.tradegate.de/orderbuch_umsaetze.php?isin={isin}"
 
 
-def get_stock_price(isin):
+def get_stock_price(isin, retries=3, delay=2):
     url = get_tradegate_url(isin)
-    response = requests.get(url)
-    response.raise_for_status()
-    soup = BeautifulSoup(response.text, "lxml")
-    tbody = soup.find("tbody", {"id": "umsaetze_body"})
-    if tbody:
-        first_row = tbody.find("tr")
-        if first_row:
-            cols = first_row.find_all("td")
-            if len(cols) >= 5:
-                price_text = cols[4].text.strip().replace("\xa0", "").replace(",", ".")
-                try:
-                    return float(price_text)
-                except Exception:
-                    log("Could not parse price:", price_text)
-    log("Could not find price on page.")
+    for attempt in range(retries):
+        try:
+            response = requests.get(url, timeout=10)
+            response.raise_for_status()
+            soup = BeautifulSoup(response.text, "lxml")
+            tbody = soup.find("tbody", {"id": "umsaetze_body"})
+            if tbody:
+                first_row = tbody.find("tr")
+                if first_row:
+                    cols = first_row.find_all("td")
+                    if len(cols) >= 5:
+                        price_text = cols[4].text.strip().replace("\xa0", "").replace(",", ".")
+                        try:
+                            return float(price_text)
+                        except Exception:
+                            log("Could not parse price:", price_text)
+            log("Could not find price on page.")
+            return None
+        except requests.exceptions.RequestException as e:
+            log(f"Error retrieving price for ISIN {isin} (attempt {attempt+1}/{retries}): {e}")
+            time.sleep(delay)
+    log(f"Failed to retrieve price for ISIN {isin} after {retries} attempts.")
     return None
 
 

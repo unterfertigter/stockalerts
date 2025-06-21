@@ -107,10 +107,16 @@ app = Flask(__name__)
 HTML_TEMPLATE = '''
 <!DOCTYPE html>
 <html>
-<head><title>Stock Alert Admin</title></head>
+<head>
+    <title>Stock Alert Admin</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script src="{{ url_for('static', filename='theme.js') }}"></script>
+</head>
 <body>
+<div class="container">
+<button class="theme-toggle" onclick="toggleTheme()">Toggle Theme</button>
 <h2>Stock Alert Administration</h2>
-<table border="1">
+<table>
 <tr><th>ISIN</th><th>Upper Threshold</th><th>Lower Threshold</th><th>Active</th><th>Actions</th></tr>
 {% for entry in config %}
 <tr>
@@ -127,6 +133,7 @@ HTML_TEMPLATE = '''
 </tr>
 {% endfor %}
 </table>
+</div>
 </body>
 </html>
 '''
@@ -156,7 +163,7 @@ def update_threshold():
         save_config(CONFIG_PATH, shared_config)
     return redirect(url_for("admin_page"))
 
-@app.route("/C", methods=["GET"])
+@app.route("/api/config", methods=["GET"])
 # Returns the current alert configuration as JSON (for API clients or debugging).
 def api_get_config():
     with config_lock:

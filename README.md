@@ -49,3 +49,12 @@ docker run --env-file .env -p 5000:5000 stock-alert
 - No API key is required; the script uses web scraping for real-time prices.
 - Web scraping may break if Tradegate changes their website layout.
 - The service uses an external SMTP server for sending emails. Configure your SMTP server details in the `.env` file.
+
+## Module Dependency Graph
+
+```mermaid
+graph TD;
+    stock_alert.py --> config_manager.py;
+    stock_alert.py --> email_utils.py;
+    stock_alert.py --> stock_monitor.py;
+```

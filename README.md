@@ -15,6 +15,9 @@ Set the following environment variables in an `.env` file (see `.env.example`) o
 - `CONFIG_PATH`: Path to the JSON config file which lists all stock ISINs to be monitored (default: `config.json`)
 - `MAX_FAIL_COUNT`: Maximum allowed consecutive failures to retrieve a stock price before stopping the service (default: 3)
 - `CHECK_INTERVAL`: Check interval in seconds (default: 60)
+- `MARKET_OPEN`: Market open time in HH:MM (24h) format (default: 07:30)
+- `MARKET_CLOSE`: Market close time in HH:MM (24h) format (default: 22:00)
+- `MAX_EXCEPTIONS`: Max consecutive unexpected exceptions before service terminates (default: 10)
 
 Create a `config.json` file in the same directory with a list of ISIN/threshold pairs:
 
@@ -31,7 +34,7 @@ Create a `config.json` file in the same directory with a list of ISIN/threshold 
 ## How it works
 
 - The script scrapes the real-time price from the Tradegate order book page for each ISIN in the config file.
-- If the stock price meets or exceeds the upper threshold, or meets or falls below the lower threshold, you receive an email alert for that stock and further alerts will be deactivated for that stock.
+- If the stock price meets or exceeds the upper threshold, or meets or falls below the lower threshold, you receive an email alert for that stock and further alerts will be deactivated for that stock (until re-enabled via the admin UI or config).
 
 ## Build and Run with Docker
 

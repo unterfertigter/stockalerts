@@ -2,11 +2,13 @@
   {
     "isin": "US69608A1088",
     "upper_threshold": 129.87,
-    "lower_threshold": 112.21
+    "lower_threshold": 112.21,
+    "active": true
   },
   {
     "isin": "US4581401001",
     "upper_threshold": 17.87,
-    "lower_threshold": 17.65
+    "lower_threshold": 17.65,
+    "active": true
   }
 ]

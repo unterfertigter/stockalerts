@@ -1,6 +1,7 @@
 import logging
 import os
 import threading
+import time  # Added back to ensure time.sleep works
 
 from dotenv import load_dotenv
 from flask import Flask, jsonify, redirect, render_template, request, url_for
@@ -9,9 +10,11 @@ from config_manager import config_lock, load_config, save_config, shared_config
 from email_utils import send_email
 from stock_monitor import get_stock_price, is_market_open
 
+# Load environment variables from .env file
 load_dotenv()
 
-CHECK_INTERVAL = int(os.getenv("CHECK_INTERVAL", "60"))  # seconds
+# Configuration constants from environment variables
+CHECK_INTERVAL = int(os.getenv("CHECK_INTERVAL", "60"))  # seconds between stock checks
 EMAIL_FROM = os.getenv("EMAIL_FROM")
 EMAIL_TO = os.getenv("EMAIL_TO")
 SMTP_SERVER = os.getenv("SMTP_SERVER")
@@ -20,7 +23,9 @@ SMTP_USERNAME = os.getenv("SMTP_USERNAME")
 SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")
 CONFIG_PATH = os.getenv("CONFIG_PATH", "config.json")
 MAX_FAIL_COUNT = int(os.getenv("MAX_FAIL_COUNT", "3"))
+MAX_EXCEPTIONS = int(os.getenv("MAX_EXCEPTIONS", "10"))
 
+# Set up logging for the application
 logging.basicConfig(
     format="[%(asctime)s] %(levelname)s: %(message)s",
     level=logging.INFO,
@@ -28,6 +33,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("stock_alert")
 
+# Log configuration for debugging
 logger.info(f"CHECK_INTERVAL = {CHECK_INTERVAL}")
 logger.info(f"EMAIL_FROM = {EMAIL_FROM}")
 logger.info(f"EMAIL_TO = {EMAIL_TO}")
@@ -37,16 +43,19 @@ logger.info(f"SMTP_USERNAME = {SMTP_USERNAME}")
 logger.info(f"SMTP_PASSWORD = {'***' if SMTP_PASSWORD else None}")
 logger.info(f"CONFIG_PATH = {CONFIG_PATH}")
 logger.info(f"MAX_FAIL_COUNT = {MAX_FAIL_COUNT}")
+logger.info(f"MAX_EXCEPTIONS = {MAX_EXCEPTIONS}")
 
+# Ensure all required environment variables are set
 if not all([EMAIL_TO, EMAIL_FROM, SMTP_SERVER, SMTP_PORT, SMTP_USERNAME, SMTP_PASSWORD]):
     raise Exception("Missing required environment variables.")
 
-# Flask app for admin UI
+# Initialize Flask app for admin UI
 app = Flask(__name__)
 
 
 @app.route("/", methods=["GET"])
 def admin_page():
+    # Render the admin UI with the current config
     with config_lock:
         config = list(shared_config)
     return render_template("admin.html", config=config)
@@ -54,6 +63,7 @@ def admin_page():
 
 @app.route("/update", methods=["POST"])
 def update_threshold():
+    # Handle updates to thresholds and active status from the admin UI
     isin = request.form["isin"]
     upper = request.form.get("upper_threshold")
     lower = request.form.get("lower_threshold")
@@ -65,17 +75,20 @@ def update_threshold():
                 entry["lower_threshold"] = float(lower) if lower else None
                 entry["active"] = active
         save_config(CONFIG_PATH, shared_config)
+    logger.info(f"Config updated via admin UI for ISIN {isin}: upper={upper}, lower={lower}, active={active}")
     return redirect(url_for("admin_page"))
 
 
 @app.route("/api/config", methods=["GET"])
 def api_get_config():
+    # API endpoint to get the current config as JSON
     with config_lock:
         return jsonify(shared_config)
 
 
 @app.route("/api/config", methods=["POST"])
 def api_update_config():
+    # API endpoint to update thresholds for a given ISIN
     data = request.json
     isin = data.get("isin")
     upper = data.get("upper_threshold")
@@ -86,10 +99,12 @@ def api_update_config():
                 entry["upper_threshold"] = upper
                 entry["lower_threshold"] = lower
         save_config(CONFIG_PATH, shared_config)
+    logger.info(f"Config updated via API for ISIN {isin}: upper={upper}, lower={lower}")
     return {"status": "ok"}
 
 
 def main():
+    """Main monitoring loop: checks stock prices, sends alerts, and manages config state."""
     global shared_config
     config = load_config(CONFIG_PATH)
     # Ensure all entries have an 'active' field (default True)
@@ -103,85 +118,128 @@ def main():
     logger.info(
         f"Monitoring {len(active_alerts)} ISIN(s) every {CHECK_INTERVAL} seconds. Max fail count: {MAX_FAIL_COUNT}"
     )
+    # Initial market state check and log
+    market_now = is_market_open()
+    if market_now:
+        logger.info("Market is currently open. Monitoring of stock prices is active.")
+    else:
+        logger.info("Market is currently closed. Stock price monitoring is paused until next market open.")
+    last_market_open = market_now
+
+    exception_count = 0  # Track consecutive unexpected exceptions
+
     while True:
-        if is_market_open():
-            to_deactivate = []
-            with config_lock:
-                alerts_to_check = [entry for entry in shared_config if entry.get("active", True)]
-            if not alerts_to_check:
-                logger.info("All entries are marked as inactive. No ISINs are currently being monitored.")
-            for entry in alerts_to_check:
-                isin = entry["isin"]
-                upper_threshold = entry.get("upper_threshold")
-                lower_threshold = entry.get("lower_threshold")
-                price = get_stock_price(isin)
-                if price is not None:
-                    logger.info(f"Current price for ISIN {isin}: {price}")
-                    fail_count = 0
-                    alert = False
-                    alert_reason = ""
-                    if upper_threshold is not None and price >= upper_threshold:
-                        alert = True
-                        alert_reason = f"reached or exceeded upper threshold {upper_threshold}"
-                    if lower_threshold is not None and price <= lower_threshold:
-                        alert = True
-                        alert_reason = f"reached or fell below lower threshold {lower_threshold}"
-                    if alert:
-                        send_email(
-                            f"Stock Alert: {isin} {alert_reason} (price: {price})",
-                            f"The stock with ISIN {isin} {alert_reason}. Current price: {price}.",
-                            EMAIL_FROM,
-                            EMAIL_TO,
-                            SMTP_SERVER,
-                            SMTP_PORT,
-                            SMTP_USERNAME,
-                            SMTP_PASSWORD,
-                        )
-                        logger.info(f"Alert sent for {isin} ({alert_reason}). Marking as inactive.")
-                        to_deactivate.append(isin)
+        try:
+            # Check if the market is currently open
+            market_now = is_market_open()
+            # Log only on market open/close transitions
+            if last_market_open is not None and market_now != last_market_open:
+                if market_now:
+                    logger.info("Market has just opened. Continuing to monitor stock prices.")
                 else:
-                    logger.warning(f"Failed to get stock price for ISIN {isin}.")
-                    send_email(
-                        f"Stock Alert: Failed to retrieve price for {isin}",
-                        f"The service failed to retrieve the stock price for ISIN {isin}.",
-                        EMAIL_FROM,
-                        EMAIL_TO,
-                        SMTP_SERVER,
-                        SMTP_PORT,
-                        SMTP_USERNAME,
-                        SMTP_PASSWORD,
-                    )
-                    fail_count += 1
-                    if fail_count >= MAX_FAIL_COUNT:
-                        logger.error(
-                            f"Failed to retrieve stock prices {MAX_FAIL_COUNT} times in a row. Stopping monitoring."
-                        )
-                        send_email(
-                            "Stock Alert: Service stopped due to repeated failures",
-                            f"The service stopped after {MAX_FAIL_COUNT} consecutive failures to retrieve stock prices.",
-                            EMAIL_FROM,
-                            EMAIL_TO,
-                            SMTP_SERVER,
-                            SMTP_PORT,
-                            SMTP_USERNAME,
-                            SMTP_PASSWORD,
-                        )
-                        return
-            # Mark ISINs as inactive
-            with config_lock:
-                for entry in shared_config:
-                    if entry["isin"] in to_deactivate:
-                        entry["active"] = False
-                alerts_to_check = [entry for entry in shared_config if entry.get("active", True)]
+                    logger.info("Market has just closed. Pausing stock price monitoring until next market open.")
+            last_market_open = market_now
+            if market_now:
+                to_deactivate = []  # List of ISINs to deactivate after alerting
+                with config_lock:
+                    alerts_to_check = [entry for entry in shared_config if entry.get("active", True)]
                 if not alerts_to_check:
                     logger.info("All entries are marked as inactive. No ISINs are currently being monitored.")
-        import time
-
-        time.sleep(CHECK_INTERVAL)
+                for entry in alerts_to_check:
+                    isin = entry["isin"]
+                    upper_threshold = entry.get("upper_threshold")
+                    lower_threshold = entry.get("lower_threshold")
+                    price = get_stock_price(isin)
+                    if price is not None:
+                        logger.info(f"Current price for ISIN {isin}: {price}")
+                        fail_count = 0  # Reset fail count on success
+                        alert = False
+                        alert_reason = ""
+                        # Check if price crosses upper threshold
+                        if upper_threshold is not None and price >= upper_threshold:
+                            alert = True
+                            alert_reason = f"reached or exceeded upper threshold {upper_threshold}"
+                        # Check if price crosses lower threshold
+                        if lower_threshold is not None and price <= lower_threshold:
+                            alert = True
+                            alert_reason = f"reached or fell below lower threshold {lower_threshold}"
+                        if alert:
+                            logger.info(f"Sending alert email for ISIN {isin}: {alert_reason}")
+                            send_email(
+                                f"Stock Alert: {isin} {alert_reason} (price: {price})",
+                                f"The stock with ISIN {isin} {alert_reason}. Current price: {price}.",
+                                EMAIL_FROM,
+                                EMAIL_TO,
+                                SMTP_SERVER,
+                                SMTP_PORT,
+                                SMTP_USERNAME,
+                                SMTP_PASSWORD,
+                            )
+                            logger.info(f"Alert sent for {isin} ({alert_reason}). Marking as inactive.")
+                            to_deactivate.append(isin)
+                            logger.info(f"ISIN {isin} marked as inactive after alert.")
+                    else:
+                        # Failed to get price: log, send notification, and increment fail count
+                        logger.warning(f"Failed to get stock price for ISIN {isin}.")
+                        logger.info(f"Sending failure notification email for ISIN {isin}.")
+                        send_email(
+                            f"Stock Alert: Failed to retrieve price for {isin}",
+                            f"The service failed to retrieve the stock price for ISIN {isin}.",
+                            EMAIL_FROM,
+                            EMAIL_TO,
+                            SMTP_SERVER,
+                            SMTP_PORT,
+                            SMTP_USERNAME,
+                            SMTP_PASSWORD,
+                        )
+                        fail_count += 1
+                        logger.warning(f"Incremented fail_count to {fail_count}")
+                        # If too many consecutive failures, stop monitoring and notify
+                        if fail_count >= MAX_FAIL_COUNT:
+                            logger.error(
+                                f"Failed to retrieve stock prices {MAX_FAIL_COUNT} times in a row. Stopping monitoring."
+                            )
+                            logger.info("Sending service stopped notification email.")
+                            send_email(
+                                "Stock Alert: Service stopped due to repeated failures",
+                                f"The service stopped after {MAX_FAIL_COUNT} consecutive failures to retrieve stock prices.",
+                                EMAIL_FROM,
+                                EMAIL_TO,
+                                SMTP_SERVER,
+                                SMTP_PORT,
+                                SMTP_USERNAME,
+                                SMTP_PASSWORD,
+                            )
+                            return
+                # Mark ISINs as inactive after alerting
+                with config_lock:
+                    for entry in shared_config:
+                        if entry["isin"] in to_deactivate:
+                            entry["active"] = False
+                            logger.info(f"ISIN {entry['isin']} set to inactive in config.")
+                    alerts_to_check = [entry for entry in shared_config if entry.get("active", True)]
+                    if not alerts_to_check:
+                        logger.info("All entries are marked as inactive. No ISINs are currently being monitored.")
+            # Wait before next check
+            time.sleep(CHECK_INTERVAL)
+            exception_count = 0  # Reset exception count after successful loop
+        except Exception as e:
+            # Catch-all for unexpected errors in the main loop
+            exception_count += 1
+            logger.error(
+                f"Unexpected exception in main monitoring loop (consecutive count: {exception_count}): {e}",
+                exc_info=True,
+            )
+            if exception_count >= MAX_EXCEPTIONS:
+                logger.critical(f"Terminating service after {MAX_EXCEPTIONS} consecutive unexpected exceptions.")
+                break
+            time.sleep(CHECK_INTERVAL)
 
 
 if __name__ == "__main__":
+    # Start Flask admin UI in a separate thread
     flask_thread = threading.Thread(target=lambda: app.run(host="0.0.0.0", port=5000, debug=False, use_reloader=False))
     flask_thread.daemon = True
     flask_thread.start()
+    # Start the main monitoring loop
     main()

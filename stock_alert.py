@@ -146,6 +146,7 @@ def update_threshold():
                 entry["upper_threshold"] = float(upper) if upper else None
                 entry["lower_threshold"] = float(lower) if lower else None
                 entry["active"] = active
+        save_config(CONFIG_PATH, shared_config)
     return redirect(url_for("admin_page"))
 
 @app.route("/C", methods=["GET"])
@@ -166,7 +167,13 @@ def api_update_config():
             if entry["isin"] == isin:
                 entry["upper_threshold"] = upper
                 entry["lower_threshold"] = lower
+        save_config(CONFIG_PATH, shared_config)
     return {"status": "ok"}
+
+
+def save_config(path: str, config: list) -> None:
+    with open(path, "w") as f:
+        json.dump(config, f, indent=2)
 
 
 def main():

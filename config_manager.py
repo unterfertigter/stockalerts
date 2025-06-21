@@ -1,6 +1,9 @@
 import json
+import logging
 import threading
-from typing import List, Dict
+from typing import Dict, List
+
+logger = logging.getLogger("config_manager")
 
 
 def load_config(path: str) -> List[Dict]:
@@ -8,10 +11,10 @@ def load_config(path: str) -> List[Dict]:
         with open(path, "r") as f:
             return json.load(f)
     except FileNotFoundError:
-        print(f"Config file not found: {path}")
+        logger.error(f"Config file not found: {path}")
         exit(1)
     except json.JSONDecodeError as e:
-        print(f"Error parsing config file '{path}': {e}")
+        logger.error(f"Error parsing config file '{path}': {e}")
         exit(1)
 
 

@@ -1,3 +1,4 @@
+import datetime
 import logging
 import os
 import threading
@@ -25,6 +26,12 @@ CONFIG_PATH = os.getenv("CONFIG_PATH", "config.json")
 MAX_FAIL_COUNT = int(os.getenv("MAX_FAIL_COUNT", "3"))
 MAX_EXCEPTIONS = int(os.getenv("MAX_EXCEPTIONS", "10"))
 
+# Load market open/close times from environment variables, defaulting to 07:30 and 22:00
+MARKET_OPEN_STR = os.getenv("MARKET_OPEN", "07:30")
+MARKET_CLOSE_STR = os.getenv("MARKET_CLOSE", "22:00")
+MARKET_OPEN = datetime.datetime.strptime(MARKET_OPEN_STR, "%H:%M").time()
+MARKET_CLOSE = datetime.datetime.strptime(MARKET_CLOSE_STR, "%H:%M").time()
+
 # Set up logging for the application
 logging.basicConfig(
     format="[%(asctime)s] %(levelname)s: %(message)s",
@@ -44,6 +51,8 @@ logger.info(f"SMTP_PASSWORD = {'***' if SMTP_PASSWORD else None}")
 logger.info(f"CONFIG_PATH = {CONFIG_PATH}")
 logger.info(f"MAX_FAIL_COUNT = {MAX_FAIL_COUNT}")
 logger.info(f"MAX_EXCEPTIONS = {MAX_EXCEPTIONS}")
+logger.info(f"MARKET_OPEN = {MARKET_OPEN}")
+logger.info(f"MARKET_CLOSE = {MARKET_CLOSE}")
 
 # Ensure all required environment variables are set
 if not all([EMAIL_TO, EMAIL_FROM, SMTP_SERVER, SMTP_PORT, SMTP_USERNAME, SMTP_PASSWORD]):
@@ -119,7 +128,7 @@ def main():
         f"Monitoring {len(active_alerts)} ISIN(s) every {CHECK_INTERVAL} seconds. Max fail count: {MAX_FAIL_COUNT}"
     )
     # Initial market state check and log
-    market_now = is_market_open()
+    market_now = is_market_open(MARKET_OPEN, MARKET_CLOSE)
     if market_now:
         logger.info("Market is currently open. Monitoring of stock prices is active.")
     else:
@@ -131,7 +140,7 @@ def main():
     while True:
         try:
             # Check if the market is currently open
-            market_now = is_market_open()
+            market_now = is_market_open(MARKET_OPEN, MARKET_CLOSE)
             # Log only on market open/close transitions
             if last_market_open is not None and market_now != last_market_open:
                 if market_now:

@@ -1,6 +1,5 @@
 import datetime
 import logging
-import os
 import time
 from typing import Optional
 
@@ -9,12 +8,6 @@ import requests
 from bs4 import BeautifulSoup
 
 logger = logging.getLogger("stock_monitor")
-
-# Load market open/close times from environment variables, defaulting to 07:30 and 22:00
-MARKET_OPEN_STR = os.getenv("MARKET_OPEN", "07:30")
-MARKET_CLOSE_STR = os.getenv("MARKET_CLOSE", "22:00")
-MARKET_OPEN = datetime.datetime.strptime(MARKET_OPEN_STR, "%H:%M").time()
-MARKET_CLOSE = datetime.datetime.strptime(MARKET_CLOSE_STR, "%H:%M").time()
 
 
 def get_tradegate_url(isin: str) -> str:
@@ -64,9 +57,9 @@ def get_stock_price(isin: str, retries: int = 3, delay: int = 2) -> Optional[flo
     return None
 
 
-def is_market_open() -> bool:
+def is_market_open(market_open: datetime.time, market_close: datetime.time) -> bool:
     """
     Returns True if the German market is open (Tradegate hours), else False.
     """
     now_cet = datetime.datetime.now(pytz.timezone("Europe/Berlin")).time()
-    return MARKET_OPEN <= now_cet <= MARKET_CLOSE
+    return market_open <= now_cet <= market_close

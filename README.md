@@ -58,3 +58,47 @@ graph TD;
     stock_alert.py --> email_utils.py;
     stock_alert.py --> stock_monitor.py;
 ```
+
+## Service Logic Flow
+
+```mermaid
+flowchart TD
+    Start([Start])
+    LoadConfig[Load config and environment variables]
+    StartFlask[Start Flask admin UI]
+    MainLoop[Main monitoring loop]
+    MarketOpen{Is market open?}
+    ForEachISIN[For each active ISIN]
+    GetPrice[Get stock price]
+    PriceOK{Price retrieved?}
+    CheckThresholds{Price crosses threshold?}
+    SendAlert[Send alert email and deactivate ISIN]
+    FailCount[Increment fail count]
+    FailLimit{Fail count >= MAX_FAIL_COUNT?}
+    SendFailAlert[Send failure notification]
+    Continue[Wait CHECK_INTERVAL seconds]
+    Exception{Unexpected exception?}
+    ExceptionCount[Increment exception count]
+    ExceptionLimit{Exception count >= MAX_EXCEPTIONS?}
+    Terminate([Terminate service])
+    AdminUI[Admin UI/config can reactivate ISINs]
+
+    Start --> LoadConfig --> StartFlask --> MainLoop
+    MainLoop --> MarketOpen
+    MarketOpen -- Yes --> ForEachISIN
+    MarketOpen -- No --> Continue
+    ForEachISIN --> GetPrice --> PriceOK
+    PriceOK -- Yes --> CheckThresholds
+    PriceOK -- No --> FailCount --> FailLimit
+    FailLimit -- Yes --> SendFailAlert --> Terminate
+    FailLimit -- No --> Continue
+    CheckThresholds -- Yes --> SendAlert --> Continue
+    CheckThresholds -- No --> Continue
+    MainLoop --> Exception
+    Exception -- Yes --> ExceptionCount --> ExceptionLimit
+    ExceptionLimit -- Yes --> Terminate
+    ExceptionLimit -- No --> Continue
+    Continue --> MainLoop
+    SendAlert --> AdminUI
+    AdminUI --> ForEachISIN
+```

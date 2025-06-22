@@ -59,7 +59,11 @@ def get_stock_price(isin: str, retries: int = 3, delay: int = 30) -> Optional[fl
 
 def is_market_open(market_open: datetime.time, market_close: datetime.time) -> bool:
     """
-    Returns True if the German market is open (Tradegate hours), else False.
+    Returns True if the German market is open (Tradegate hours) and today is a weekday (Mon-Fri), else False.
     """
-    now_cet = datetime.datetime.now(pytz.timezone("Europe/Berlin")).time()
+    tz = pytz.timezone("Europe/Berlin")
+    now = datetime.datetime.now(tz)
+    if now.weekday() >= 5:  # 5 = Saturday, 6 = Sunday
+        return False
+    now_cet = now.time()
     return market_open <= now_cet <= market_close

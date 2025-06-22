@@ -2,7 +2,7 @@ import logging
 
 from flask import Blueprint, jsonify, request
 
-from config_manager import CONFIG_PATH, config_lock, save_config, shared_config
+from config_manager import config_lock, save_config, shared_config
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +42,6 @@ def api_update_config():
             if entry["isin"] == isin:
                 entry["upper_threshold"] = upper
                 entry["lower_threshold"] = lower
-        save_config(CONFIG_PATH, shared_config)
+        save_config(shared_config)
     logger.info(f"Config updated via API for ISIN {isin}: upper={upper}, lower={lower}")
     return {"status": "ok"}

@@ -11,21 +11,23 @@ from flask import Flask
 
 from admin_ui import admin_ui
 from api import api
-from config_manager import CONFIG_PATH, config_lock, load_config, save_config, shared_config
-from email_utils import send_email, set_email_config
 from stock_monitor import get_stock_price, is_market_open
 
 # Load environment variables from .env file
 load_dotenv()
+from config_manager import CONFIG_PATH, config_lock, load_config, save_config, shared_config  # noqa: E402
+from email_utils import (  # noqa: E402
+    EMAIL_FROM,
+    EMAIL_TO,
+    SMTP_PASSWORD,
+    SMTP_PORT,
+    SMTP_SERVER,
+    SMTP_USERNAME,
+    send_email,
+)
 
 # Configuration constants from environment variables
 CHECK_INTERVAL = int(os.getenv("CHECK_INTERVAL", "60"))  # seconds between stock checks
-EMAIL_FROM = os.getenv("EMAIL_FROM")
-EMAIL_TO = os.getenv("EMAIL_TO")
-SMTP_SERVER = os.getenv("SMTP_SERVER")
-SMTP_PORT = int(os.getenv("SMTP_PORT", 587))
-SMTP_USERNAME = os.getenv("SMTP_USERNAME")
-SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")
 MAX_FAIL_COUNT = int(os.getenv("MAX_FAIL_COUNT", "3"))
 MAX_EXCEPTIONS = int(os.getenv("MAX_EXCEPTIONS", "10"))
 
@@ -56,10 +58,6 @@ logger.info(f"MAX_FAIL_COUNT = {MAX_FAIL_COUNT}")
 logger.info(f"MAX_EXCEPTIONS = {MAX_EXCEPTIONS}")
 logger.info(f"MARKET_OPEN = {MARKET_OPEN}")
 logger.info(f"MARKET_CLOSE = {MARKET_CLOSE}")
-
-# Ensure all required environment variables are set
-if not all([EMAIL_TO, EMAIL_FROM, SMTP_SERVER, SMTP_PORT, SMTP_USERNAME, SMTP_PASSWORD]):
-    raise Exception("Missing required environment variables.")
 
 # Initialize Flask app for admin UI
 app = Flask(__name__)
@@ -204,15 +202,6 @@ def main():
 
 
 if __name__ == "__main__":
-    # Set up email config once at startup
-    set_email_config(
-        EMAIL_FROM,
-        EMAIL_TO,
-        SMTP_SERVER,
-        SMTP_PORT,
-        SMTP_USERNAME,
-        SMTP_PASSWORD,
-    )
     # Start Flask admin UI in a separate thread
     flask_thread = threading.Thread(target=lambda: app.run(host="0.0.0.0", port=5000, debug=False, use_reloader=False))
     flask_thread.daemon = True

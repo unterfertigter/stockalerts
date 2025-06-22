@@ -3,7 +3,7 @@ import logging
 from flask import Blueprint, redirect, render_template, request, url_for
 from wtforms import BooleanField, FloatField, Form, validators
 
-from config_manager import CONFIG_PATH, config_lock, save_config, shared_config
+from config_manager import config_lock, save_config, shared_config
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +41,6 @@ def update_threshold():
                 entry["upper_threshold"] = upper if upper is not None else None
                 entry["lower_threshold"] = lower if lower is not None else None
                 entry["active"] = bool(active)
-        save_config(CONFIG_PATH, shared_config)
+        save_config(shared_config)
     logger.info(f"Config updated via admin UI for ISIN {isin}: upper={upper}, lower={lower}, active={active}")
     return redirect(url_for("admin_ui.admin_page"))

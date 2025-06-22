@@ -17,7 +17,7 @@ def get_tradegate_url(isin: str) -> str:
     return f"https://www.tradegate.de/orderbuch_umsaetze.php?isin={isin}"
 
 
-def get_stock_price(isin: str, retries: int = 3, delay: int = 2) -> Optional[float]:
+def get_stock_price(isin: str, retries: int = 3, delay: int = 30) -> Optional[float]:
     """
     Retrieve the latest stock price for a given ISIN from Tradegate.
     Retries up to `retries` times with `delay` seconds between attempts.

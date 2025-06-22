@@ -3,6 +3,7 @@ import logging
 import os
 import threading
 import time  # Added back to ensure time.sleep works
+import traceback
 
 from dotenv import load_dotenv
 from flask import Flask, jsonify, redirect, render_template, request, url_for
@@ -188,19 +189,8 @@ def main():
                             to_deactivate.append(isin)
                             logger.info(f"ISIN {isin} marked as inactive after alert.")
                     else:
-                        # Failed to get price: log, send notification, and increment fail count
+                        # Failed to get price: log and increment fail count
                         logger.warning(f"Failed to get stock price for ISIN {isin}.")
-                        logger.info(f"Sending failure notification email for ISIN {isin}.")
-                        send_email(
-                            f"Stock Alert: Failed to retrieve price for {isin}",
-                            f"The service failed to retrieve the stock price for ISIN {isin}.",
-                            EMAIL_FROM,
-                            EMAIL_TO,
-                            SMTP_SERVER,
-                            SMTP_PORT,
-                            SMTP_USERNAME,
-                            SMTP_PASSWORD,
-                        )
                         fail_count += 1
                         logger.warning(f"Incremented fail_count to {fail_count}")
                         # If too many consecutive failures, stop monitoring and notify
@@ -210,8 +200,8 @@ def main():
                             )
                             logger.info("Sending service stopped notification email.")
                             send_email(
-                                "Stock Alert: Service stopped due to repeated failures",
-                                f"The service stopped after {MAX_FAIL_COUNT} consecutive failures to retrieve stock prices.",
+                                "Stock Alert: Service terminated due to repeated failures",
+                                f"The service terminated after {MAX_FAIL_COUNT} consecutive failures to retrieve stock prices.",
                                 EMAIL_FROM,
                                 EMAIL_TO,
                                 SMTP_SERVER,
@@ -235,12 +225,26 @@ def main():
         except Exception as e:
             # Catch-all for unexpected errors in the main loop
             exception_count += 1
+
             logger.error(
                 f"Unexpected exception in main monitoring loop (consecutive count: {exception_count}): {e}",
                 exc_info=True,
             )
             if exception_count >= MAX_EXCEPTIONS:
                 logger.critical(f"Terminating service after {MAX_EXCEPTIONS} consecutive unexpected exceptions.")
+                exc_str = "".join(traceback.format_exception(type(e), e, e.__traceback__))
+                send_email(
+                    "Stock Alert: Service terminated due to repeated unexpected exceptions",
+                    f"The service terminated after {MAX_EXCEPTIONS} consecutive unexpected exceptions in the main loop.\n\n"
+                    + "Last exception:\n"
+                    + exc_str,
+                    EMAIL_FROM,
+                    EMAIL_TO,
+                    SMTP_SERVER,
+                    SMTP_PORT,
+                    SMTP_USERNAME,
+                    SMTP_PASSWORD,
+                )
                 break
             time.sleep(CHECK_INTERVAL)
 

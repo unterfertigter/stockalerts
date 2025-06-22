@@ -75,7 +75,7 @@ flowchart TD
     SendAlert[Send alert email and deactivate ISIN]
     FailCount[Increment fail count]
     FailLimit{Fail count >= MAX_FAIL_COUNT?}
-    SendFailAlert[Send failure notification]
+    SendTerminationAlert[Send termination notification]
     Continue[Wait CHECK_INTERVAL seconds]
     Exception{Unexpected exception?}
     ExceptionCount[Increment exception count]
@@ -90,13 +90,13 @@ flowchart TD
     ForEachISIN --> GetPrice --> PriceOK
     PriceOK -- Yes --> CheckThresholds
     PriceOK -- No --> FailCount --> FailLimit
-    FailLimit -- Yes --> SendFailAlert --> Terminate
+    FailLimit -- Yes --> SendTerminationAlert --> Terminate
     FailLimit -- No --> Continue
     CheckThresholds -- Yes --> SendAlert --> Continue
     CheckThresholds -- No --> Continue
     MainLoop --> Exception
     Exception -- Yes --> ExceptionCount --> ExceptionLimit
-    ExceptionLimit -- Yes --> Terminate
+    ExceptionLimit -- Yes --> SendTerminationAlert
     ExceptionLimit -- No --> Continue
     Continue --> MainLoop
     SendAlert --> AdminUI

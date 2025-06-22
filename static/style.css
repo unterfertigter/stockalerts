@@ -98,6 +98,14 @@ input[type="number"] {
     border: 1px solid var(--input-border);
 }
 
+input[type="text"] {
+    width: 180px;
+    padding: 4px;
+    background: var(--input-bg);
+    color: var(--input-text);
+    border: 1px solid var(--input-border);
+}
+
 input[type="submit"] {
     background: var(--button-bg);
     color: var(--button-text);

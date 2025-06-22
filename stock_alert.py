@@ -61,6 +61,7 @@ logger.info(f"MARKET_CLOSE = {MARKET_CLOSE}")
 
 # Initialize Flask app for admin UI
 app = Flask(__name__)
+app.secret_key = os.urandom(12).hex()
 app.register_blueprint(admin_ui)
 app.register_blueprint(api)
 

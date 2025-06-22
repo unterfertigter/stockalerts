@@ -11,7 +11,7 @@
     <div class="container">
         <button class="theme-toggle" onclick="toggleTheme()">Toggle Theme</button>
         <h2>Stock Alert Administration</h2>
-        <table>
+        <table style="width:100%;">
             <tr>
                 <th>ISIN</th>
                 <th>Upper Threshold</th>
@@ -32,11 +32,30 @@
                     <td>
                         <input type="hidden" name="isin" value="{{ entry['isin'] }}">
                         <input type="submit" value="Update">
-                    </td>
                 </form>
+                <form method="post" action="/delete" style="display:inline;">
+                    <input type="hidden" name="delete_isin" value="{{ entry['isin'] }}">
+                    <input type="submit" value="Delete" onclick="return confirm('Delete ISIN {{ entry['isin'] }}?');">
+                </form>
+                </td>
             </tr>
             {% endfor %}
         </table>
+        <div style="width:100%; display:flex; justify-content:flex-start; margin-top:1em;">
+            <form method="post" action="/add" style="display:inline-block;">
+                <input type="text" name="new_isin" placeholder="New ISIN (12 chars)" maxlength="12" required>
+                <input type="submit" value="Add ISIN">
+            </form>
+        </div>
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        <ul class="flashes">
+            {% for category, message in messages %}
+            <li class="{{ category }}">{{ message }}</li>
+            {% endfor %}
+        </ul>
+        {% endif %}
+        {% endwith %}
     </div>
 </body>
 

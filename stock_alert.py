@@ -2,15 +2,16 @@ import datetime
 import logging
 import os
 import signal
-import sys
 import threading
 import time  # Added back to ensure time.sleep works
 import traceback
 
 from dotenv import load_dotenv
-from flask import Flask, jsonify, redirect, render_template, request, url_for
+from flask import Flask
 
-from config_manager import config_lock, load_config, save_config, shared_config
+from admin_ui import admin_ui
+from api import api
+from config_manager import CONFIG_PATH, config_lock, load_config, save_config, shared_config
 from email_utils import send_email, set_email_config
 from stock_monitor import get_stock_price, is_market_open
 
@@ -25,7 +26,6 @@ SMTP_SERVER = os.getenv("SMTP_SERVER")
 SMTP_PORT = int(os.getenv("SMTP_PORT", 587))
 SMTP_USERNAME = os.getenv("SMTP_USERNAME")
 SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")
-CONFIG_PATH = os.getenv("CONFIG_PATH", "config.json")
 MAX_FAIL_COUNT = int(os.getenv("MAX_FAIL_COUNT", "3"))
 MAX_EXCEPTIONS = int(os.getenv("MAX_EXCEPTIONS", "10"))
 
@@ -41,7 +41,7 @@ logging.basicConfig(
     level=logging.INFO,
     datefmt="%Y-%m-%d %H:%M:%S",
 )
-logger = logging.getLogger("stock_alert")
+logger = logging.getLogger(__name__)
 
 # Log configuration for debugging
 logger.info(f"CHECK_INTERVAL = {CHECK_INTERVAL}")
@@ -63,58 +63,10 @@ if not all([EMAIL_TO, EMAIL_FROM, SMTP_SERVER, SMTP_PORT, SMTP_USERNAME, SMTP_PA
 
 # Initialize Flask app for admin UI
 app = Flask(__name__)
+app.register_blueprint(admin_ui)
+app.register_blueprint(api)
 
 shutdown_event = threading.Event()
-
-
-@app.route("/", methods=["GET"])
-def admin_page():
-    # Render the admin UI with the current config
-    with config_lock:
-        config = list(shared_config)
-    return render_template("admin.html", config=config)
-
-
-@app.route("/update", methods=["POST"])
-def update_threshold():
-    # Handle updates to thresholds and active status from the admin UI
-    isin = request.form["isin"]
-    upper = request.form.get("upper_threshold")
-    lower = request.form.get("lower_threshold")
-    active = request.form.get("active") == "1"
-    with config_lock:
-        for entry in shared_config:
-            if entry["isin"] == isin:
-                entry["upper_threshold"] = float(upper) if upper else None
-                entry["lower_threshold"] = float(lower) if lower else None
-                entry["active"] = active
-        save_config(CONFIG_PATH, shared_config)
-    logger.info(f"Config updated via admin UI for ISIN {isin}: upper={upper}, lower={lower}, active={active}")
-    return redirect(url_for("admin_page"))
-
-
-@app.route("/api/config", methods=["GET"])
-def api_get_config():
-    # API endpoint to get the current config as JSON
-    with config_lock:
-        return jsonify(shared_config)
-
-
-@app.route("/api/config", methods=["POST"])
-def api_update_config():
-    # API endpoint to update thresholds for a given ISIN
-    data = request.json
-    isin = data.get("isin")
-    upper = data.get("upper_threshold")
-    lower = data.get("lower_threshold")
-    with config_lock:
-        for entry in shared_config:
-            if entry["isin"] == isin:
-                entry["upper_threshold"] = upper
-                entry["lower_threshold"] = lower
-        save_config(CONFIG_PATH, shared_config)
-    logger.info(f"Config updated via API for ISIN {isin}: upper={upper}, lower={lower}")
-    return {"status": "ok"}
 
 
 def handle_shutdown(signum, frame):
@@ -130,7 +82,7 @@ signal.signal(signal.SIGTERM, handle_shutdown)  # Docker/K8s
 def main():
     """Main monitoring loop: checks stock prices, sends alerts, and manages config state."""
     global shared_config
-    config = load_config(CONFIG_PATH)
+    config = load_config()
     # Ensure all entries have an 'active' field (default True)
     for entry in config:
         if "active" not in entry:
@@ -245,7 +197,7 @@ def main():
             time.sleep(CHECK_INTERVAL)
     # After loop exits, do cleanup
     with config_lock:
-        save_config(CONFIG_PATH, shared_config)
+        save_config(shared_config)
     logger.info("Service shutdown complete.")
     # Optionally:
     # send_email("Stock Alert: Service stopped", "The service was stopped gracefully.")

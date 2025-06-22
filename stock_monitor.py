@@ -7,7 +7,7 @@ import pytz
 import requests
 from bs4 import BeautifulSoup
 
-logger = logging.getLogger("stock_monitor")
+logger = logging.getLogger(__name__)
 
 
 def get_tradegate_url(isin: str) -> str:

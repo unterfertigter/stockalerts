@@ -1,14 +1,17 @@
 import json
 import logging
+import os
 import threading
 from typing import Dict, List
 
-logger = logging.getLogger("config_manager")
+logger = logging.getLogger(__name__)
+
+CONFIG_PATH = os.getenv("CONFIG_PATH", "config.json")
 
 
-def load_config(path: str) -> List[Dict]:
+def load_config(path: str = CONFIG_PATH) -> List[Dict]:
     """
-    Load the configuration from a JSON file at the given path.
+    Load the configuration from a JSON file at the given path (defaults to CONFIG_PATH).
     Returns a list of ISIN config dicts.
     Logs the number of ISINs loaded.
     """
@@ -25,9 +28,9 @@ def load_config(path: str) -> List[Dict]:
         exit(1)
 
 
-def save_config(path: str, config: List[Dict]) -> None:
+def save_config(config: List[Dict], path: str = CONFIG_PATH) -> None:
     """
-    Save the configuration to a JSON file at the given path.
+    Save the configuration to a JSON file at the given path (defaults to CONFIG_PATH).
     Logs the number of ISINs saved.
     """
     with open(path, "w") as f:

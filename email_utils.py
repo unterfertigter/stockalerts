@@ -2,7 +2,7 @@ import logging
 import smtplib
 from email.mime.text import MIMEText
 
-logger = logging.getLogger("email_utils")
+logger = logging.getLogger(__name__)
 
 EMAIL_CONFIG = {}
 

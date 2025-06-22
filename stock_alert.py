@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 from flask import Flask, jsonify, redirect, render_template, request, url_for
 
 from config_manager import config_lock, load_config, save_config, shared_config
-from email_utils import send_email
+from email_utils import send_email, set_email_config
 from stock_monitor import get_stock_price, is_market_open
 
 # Load environment variables from .env file
@@ -178,12 +178,6 @@ def main():
                             send_email(
                                 f"Stock Alert: {isin} {alert_reason} (price: {price})",
                                 f"The stock with ISIN {isin} {alert_reason}. Current price: {price}.",
-                                EMAIL_FROM,
-                                EMAIL_TO,
-                                SMTP_SERVER,
-                                SMTP_PORT,
-                                SMTP_USERNAME,
-                                SMTP_PASSWORD,
                             )
                             logger.info(f"Alert sent for {isin} ({alert_reason}). Marking as inactive.")
                             to_deactivate.append(isin)
@@ -202,12 +196,6 @@ def main():
                             send_email(
                                 "Stock Alert: Service terminated due to repeated failures",
                                 f"The service terminated after {MAX_FAIL_COUNT} consecutive failures to retrieve stock prices.",
-                                EMAIL_FROM,
-                                EMAIL_TO,
-                                SMTP_SERVER,
-                                SMTP_PORT,
-                                SMTP_USERNAME,
-                                SMTP_PASSWORD,
                             )
                             return
                 # Mark ISINs as inactive after alerting
@@ -238,18 +226,21 @@ def main():
                     f"The service terminated after {MAX_EXCEPTIONS} consecutive unexpected exceptions in the main loop.\n\n"
                     + "Last exception:\n"
                     + exc_str,
-                    EMAIL_FROM,
-                    EMAIL_TO,
-                    SMTP_SERVER,
-                    SMTP_PORT,
-                    SMTP_USERNAME,
-                    SMTP_PASSWORD,
                 )
                 break
             time.sleep(CHECK_INTERVAL)
 
 
 if __name__ == "__main__":
+    # Set up email config once at startup
+    set_email_config(
+        EMAIL_FROM,
+        EMAIL_TO,
+        SMTP_SERVER,
+        SMTP_PORT,
+        SMTP_USERNAME,
+        SMTP_PASSWORD,
+    )
     # Start Flask admin UI in a separate thread
     flask_thread = threading.Thread(target=lambda: app.run(host="0.0.0.0", port=5000, debug=False, use_reloader=False))
     flask_thread.daemon = True

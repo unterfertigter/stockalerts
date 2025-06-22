@@ -24,7 +24,7 @@ def get_stock_price(isin: str, retries: int = 3, delay: int = 30) -> Optional[fl
     Returns the price as float, or None if retrieval fails.
     """
     url = get_tradegate_url(isin)
-    logger.info(f"Starting price retrieval for ISIN {isin} (max {retries} attempts)")
+    logger.info(f"Starting price retrieval for ISIN {isin} from {url}")
     for attempt in range(retries):
         try:
             logger.debug(f"Attempt {attempt + 1} to retrieve price for ISIN {isin} from {url}")

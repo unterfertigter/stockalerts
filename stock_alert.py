@@ -1,6 +1,8 @@
 import datetime
 import logging
 import os
+import signal
+import sys
 import threading
 import time  # Added back to ensure time.sleep works
 import traceback
@@ -62,6 +64,8 @@ if not all([EMAIL_TO, EMAIL_FROM, SMTP_SERVER, SMTP_PORT, SMTP_USERNAME, SMTP_PA
 # Initialize Flask app for admin UI
 app = Flask(__name__)
 
+shutdown_event = threading.Event()
+
 
 @app.route("/", methods=["GET"])
 def admin_page():
@@ -113,6 +117,16 @@ def api_update_config():
     return {"status": "ok"}
 
 
+def handle_shutdown(signum, frame):
+    logger.info(f"Received shutdown signal ({signum}). Shutting down gracefully...")
+    shutdown_event.set()
+
+
+# Register signal handlers
+signal.signal(signal.SIGINT, handle_shutdown)  # Ctrl+C
+signal.signal(signal.SIGTERM, handle_shutdown)  # Docker/K8s
+
+
 def main():
     """Main monitoring loop: checks stock prices, sends alerts, and manages config state."""
     global shared_config
@@ -138,7 +152,7 @@ def main():
 
     exception_count = 0  # Track consecutive unexpected exceptions
 
-    while True:
+    while not shutdown_event.is_set():
         try:
             # Check if the market is currently open
             market_now = is_market_open(MARKET_OPEN, MARKET_CLOSE)
@@ -229,6 +243,12 @@ def main():
                 )
                 break
             time.sleep(CHECK_INTERVAL)
+    # After loop exits, do cleanup
+    with config_lock:
+        save_config(CONFIG_PATH, shared_config)
+    logger.info("Service shutdown complete.")
+    # Optionally:
+    # send_email("Stock Alert: Service stopped", "The service was stopped gracefully.")
 
 
 if __name__ == "__main__":

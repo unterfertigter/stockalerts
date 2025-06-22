@@ -57,6 +57,10 @@ graph TD;
     stock_alert.py --> config_manager.py;
     stock_alert.py --> email_utils.py;
     stock_alert.py --> stock_monitor.py;
+    stock_alert.py --> admin_ui.py;
+    stock_alert.py --> api.py;
+    admin_ui.py --> config_manager.py;
+    api.py --> config_manager.py;
 ```
 
 ## Service Logic Flow
@@ -81,7 +85,9 @@ flowchart TD
     ExceptionCount[Increment exception count]
     ExceptionLimit{Exception count >= MAX_EXCEPTIONS?}
     Terminate([Terminate service])
-    AdminUI[Admin UI/config can reactivate ISINs]
+    AdminUI[Admin UI/config can reactivate, add, or delete ISINs]
+    AddISIN[Add ISIN]
+    DeleteISIN[Delete ISIN]
 
     Start --> LoadConfig --> StartFlask --> MainLoop
     MainLoop --> MarketOpen

@@ -1,6 +1,6 @@
 # Stock Alert Service
 
-This service checks multiple stock prices at regular intervals using real-time data from Tradegate Exchange and sends an email alert when a price threshold is reached.
+This service checks multiple stock prices at regular intervals using real-time data from Tradegate Exchange and sends an email alert when a price threshold is reached. It comes with an admin UI to set price thresholds or add and delete stocks.
 
 ## Configuration
 
@@ -39,9 +39,9 @@ Create a `config.json` file in the same directory with a list of ISIN/threshold 
 ## Build and Run with Docker
 
 ```bash
-docker build -t stock-alert .
+docker build -t stockalerts .
 
-docker run --env-file .env -p 5000:5000 stock-alert
+docker run --name stockalerts --env-file .env -p 5000:5000 stockalerts
 ```
 
 ## Notes
@@ -49,6 +49,7 @@ docker run --env-file .env -p 5000:5000 stock-alert
 - No API key is required; the script uses web scraping for real-time prices.
 - Web scraping may break if Tradegate changes their website layout.
 - The service uses an external SMTP server for sending emails. Configure your SMTP server details in the `.env` file.
+- The admin UI is accessible through `localhost:5000`
 
 ## Module Dependency Graph
 
